@@ -18,7 +18,7 @@ import signal
 
 # Describe packet structure to talk to printer
 class Packet:
-    MAGIC = b'ISNP'
+    MAGIC        = b'ISNP'
     REQUEST      = 0x0001
     RESPONSE     = 0x0002
     TYPE_TOKEN   = 1000
@@ -186,6 +186,15 @@ class Packet:
 #    sthread.join ()
 #    sys.exit (0)
     
+def byte2hex (data):
+    pdata = ' '.join("{:02x}".format(d) for d in data)
+    pdata = '\n'.join(pdata[i:i+48] for i in range(0, len(pdata), 48))
+    return pdata
+
+def byte2hexstr(data):
+    ret = re.sub(f'[^{re.escape(string.printable)}]', '.', data.decode ('ascii', 'replace'))
+    return re.sub(r"\s+", '.', ret)
+
 
 # Listen for client requests from the application
 # client => server
@@ -194,8 +203,15 @@ def listen_client (port, cproc, sproc, log):
     cin = cproc.stdout.raw
     data = b''
     while 1:
-        data += cin.read (1024)
+        try:
+            data += cin.read (1024)
+        except Exception as e:
+            print ("Client read failed")
+            
         #ts = datetime.datetime.now().strftime("%M.%S.%f")
+        print ("read=" + str(len(data)))
+        print (byte2hex (data))
+        print (byte2hexstr (data))
         if data and len(data) >= 31:
             sproc.stdin.write (data)
             sproc.stdin.flush ()
@@ -219,7 +235,10 @@ def listen_server (server, sproc, cproc, log):
     print ("connected to server:" + server)
     sin = sproc.stdout.raw
     while 1:
-        data = sin.read (1024)
+        try:
+            data = sin.read (1024)
+        except Exception as e:
+            print ("Server read failed")
         #ts = datetime.datetime.now().strftime("%M.%S.%f")
         cproc.stdin.write (data)
         cproc.stdin.flush ()
