@@ -14,7 +14,17 @@ if __name__ == '__main__':
     sm70.Open ()
 
     # Get devices
-    sm70.GetDevices ()
+    devs = sm70.GetDevices ()
+    for d in devs:
+        print ('Found: ' + d.Name ())
 
+    
+    hop = Device.Select (devs, 'HOPPER')
+    ptr = Device.Select (devs, 'PRINTER')
+    flip = Device.Select (devs, 'FLIPPER')
+    print (hop.GetFirmware ())
+    print (ptr.GetFirmware ())
+    print (flip.GetFirmware ())
+    
     # Close connection
     sm70.Close ()

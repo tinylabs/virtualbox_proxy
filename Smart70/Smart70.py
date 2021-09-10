@@ -85,9 +85,9 @@ class Packet:
         
     def SendRecv (self, conn):
         conn.send (self.raw)
-        print (self.Verbose ())
+        #print (self.Verbose ())
         self.Recv (conn)
-        print (self.Verbose ())
+        #print (self.Verbose ())
         Packet.idx += 1
         # Save token if connect
         if self.pkt_type == Packet.CONNECT:
@@ -200,10 +200,18 @@ class Device (Packet):
         'STATE'    : 0x0360,
         }
 
-    def __init__ (self, dev_id, token=0):
-        Packet.__init__ (self, token)
+    def __init__ (self, dev_id, conn, state):
+        Packet.__init__ (self)
         self.dev_id = dev_id
-
+        self.state = state
+        self.conn = conn
+        
+    @staticmethod
+    def Select (dlist, name):
+        for d in dlist:
+            if d.Name() == name:
+                return d
+            
     # Return 64 bit status of module
     def GetStatus (self):
         pass
@@ -216,12 +224,22 @@ class Device (Packet):
     def GetState (self):
         pass
 
+    def Encode (self, ptype, attr):
+        super().Encode (ptype, struct.pack ('<H', self.ATTR[attr]) + struct.pack ('B', self.dev_id))
+        
+    def GetFirmware (self):
+        self.Encode (Packet.GET, 'FIRMWARE')
+        self.SendRecv (self.conn)
+        return self.payload.decode ('ascii')
+    
     def CardIn (self):
         pass
 
     def CardOut (self):
         pass
 
+    def Name (self):
+        return self.NAME[self.dev_id]
         
 class Smart70:
 
@@ -285,8 +303,12 @@ class Smart70:
         pkt.SendRecv (self.client_conn)
 
         # Decode response
-        devs = []
-        return devs
+        devices = []
+        cnt = pkt.payload[0]
+        dp = pkt.payload[1:]
+        for n in range (0, cnt):
+            devices.append (Device (dp[n*2], self.client_conn, dp[n*2+1]))
+        return devices
     
     def CardMove (self, mod_from, mod_to):
         pass
