@@ -17,7 +17,6 @@ if __name__ == '__main__':
     devs = sm70.GetDevices ()
     for d in devs:
         print ('Found: ' + d.Name ())
-
     
     hop = Device.Select (devs, 'HOPPER')
     ptr = Device.Select (devs, 'PRINTER')
