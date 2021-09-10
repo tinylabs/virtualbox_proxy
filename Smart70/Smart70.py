@@ -17,39 +17,81 @@ from collections import defaultdict
 
 class Packet:
 
+    # Save these global variables to ease connections
     idx = 0
-    MAGIC = b'ISNP'
+    token = 0
     
+    MAGIC      = b'ISNP'
+    CONNECT    = 0x03e8
+    DISCONNECT = 0x03e9
+    GET        = 0x0c1c
+    PUT        = 0x0c1d
     CMD = {
-        0x03e8 : { 'STR' : 'CONNECT',
-                   'REQ' : { 'TOKEN' : False, 'FIELDS' : [] },
-                   'RSP' : { 'TOKEN' : True, 'FIELDS' : [4] }},
-        0x03e9 : { 'STR' : 'DISCONNECT',
-                   'REQ' : { 'TOKEN' : True, 'FIELDS' : [] },
-                   'RSP' : { 'TOKEN' : False, 'FIELDS' : [] }},
-        0x0c1c : { 'STR' : 'GET',
-                   'REQ' : { 'TOKEN' : True, 'FIELDS' : [4] },
-                   'RSP' : { 'TOKEN' : True, 'FIELDS' : [4] }},
-        0x0c1d : { 'STR' : 'PUT',
-                   'REQ' : { 'TOKEN' : True, 'FIELDS' : [4] },
-                   'RSP' : { 'TOKEN' : False, 'FIELDS' : [] }},
+        CONNECT : { 'STR' : 'CONNECT',
+                    'REQ' : { 'TOKEN' : False, 'FIELDS' : [] },
+                    'RSP' : { 'TOKEN' : True, 'FIELDS' : [4] }},
+        DISCONNECT : { 'STR' : 'DISCONNECT',
+                       'REQ' : { 'TOKEN' : False, 'FIELDS' : [] },
+                       'RSP' : { 'TOKEN' : False, 'FIELDS' : [] }},
+        GET : { 'STR' : 'GET',
+                'REQ' : { 'TOKEN' : True, 'FIELDS' : [4] },
+                'RSP' : { 'TOKEN' : True, 'FIELDS' : [4] }},
+        PUT : { 'STR' : 'PUT',
+                'REQ' : { 'TOKEN' : True, 'FIELDS' : [4] },
+                'RSP' : { 'TOKEN' : False, 'FIELDS' : [] }},
     }
 
 
-    def __init__ (self, token=0):
-        self.token = token
+    def __init__ (self):
         self.raw = b''
 
     def Reset (self):
         Packet.idx = 0
 
     def Encode (self, ptype, payload):
-        self.raw = Packet.MAGIC
-        self.raw += Packet.idx
-        Packet.idx += 1
+
+        # Setup local variables
+        self.magic = Packet.MAGIC
+        self.idx = Packet.idx
+        self.pkt_type = ptype
+        self.direction = 'REQ'
+        self.field_cnt = len(self.CMD[ptype]['REQ']['FIELDS']) + 1
+        self.field = []
+        for n in range (0, self.field_cnt - 1):
+            self.field.append (self.CMD[ptype]['REQ']['FIELDS'][n])
+        self.payload_len = len (payload)
+        self.field.append (self.payload_len)
+        if self.CMD[ptype]['REQ']['TOKEN']:
+            self.token = Packet.token
+        else:
+            self.token = 0xFFFFFFFF
+        self.payload = payload
+
+        # Assemble into raw packet
+        self.raw = self.magic
+        self.raw += struct.pack ('<I', self.idx)
+        self.raw += struct.pack ('<H', self.pkt_type)
+        # Type = REQUEST
+        self.raw += struct.pack ('<H', 1) 
+        self.raw += struct.pack ('<I', self.field_cnt)
+        # Fields
+        for n in range (0, self.field_cnt):
+            self.raw += struct.pack ('<I', self.field[n])
+        # Add token if needed
+        if self.CMD[ptype]['REQ']['TOKEN']:
+            self.raw += struct.pack ('<I', self.token)
+        # Add payload
+        self.raw += payload
         
-    def Send (self, conn):
+    def SendRecv (self, conn):
         conn.send (self.raw)
+        print (self.Verbose ())
+        self.Recv (conn)
+        print (self.Verbose ())
+        Packet.idx += 1
+        # Save token if connect
+        if self.pkt_type == Packet.CONNECT:
+            Packet.token = struct.unpack ("<I", self.payload)[0]
         
     def Recv (self, conn):
 
@@ -60,7 +102,7 @@ class Packet:
         self.magic = self.raw[0:4]
         self.idx = struct.unpack ("<I", self.raw[4:8])[0]
         self.pkt_type = struct.unpack ("<H", self.raw[8:10])[0]
-        self.direction = self.REQ_RESP[struct.unpack ("<H", self.raw[10:12])[0]]
+        self.direction = struct.unpack ("<H", self.raw[10:12])[0]
         if self.direction == 1:
             self.direction = 'REQ'
         elif self.direction == 2:
@@ -108,6 +150,7 @@ class Packet:
     def __str__ (self):
         ret = str (self.idx) + ':'
         ret += self.CMD[self.pkt_type]['STR'] + ' '
+        ret += self.direction + ' '
         ret += self.byte2hex (self.payload)
         return ret
     
@@ -121,7 +164,7 @@ class Packet:
         ret += "DIR  : " + self.direction + '\n'
         ret += "MAGIC: " + str(self.magic) + '\n'
         ret += "INDEX: " + str(self.idx) + '\n'
-        ret += "TYPE : " + str(self.pkt_type) + '\n'
+        ret += "TYPE : " + self.CMD[self.pkt_type]['STR'] + '\n'
         ret += "FCNT : " + str(self.field_cnt) + '\n'
         for n in range (0, self.field_cnt):
             ret += ' [' + str(n) + '] : ' + str(self.field[n]) + '\n'
@@ -143,14 +186,50 @@ class Packet:
     def Send (self, conn):
         conn.send (self.raw)
 
-class Smart70:
+class Device (Packet):
 
-    # Connection modes
-    MODE_CLIENT = 0
-    MODE_PROXY  = 1
+    NAME = {
+        0x00 : 'SYSTEM',
+        0x10 : 'HOPPER',
+        0x40 : 'PRINTER',
+        0x60 : 'FLIPPER'
+    }
+    ATTR = {
+        'FIRMWARE' : 0x0150,
+        'STATUS'   : 0x0003,
+        'STATE'    : 0x0360,
+        }
+
+    def __init__ (self, dev_id, token=0):
+        Packet.__init__ (self, token)
+        self.dev_id = dev_id
+
+    # Return 64 bit status of module
+    def GetStatus (self):
+        pass
+
+    # Get module state
+    # 0x04 - Module has card
+    # 0x08 - Module is initializing
+    # 0x10 - Running last command
+    # 0x20 - Failed last command
+    def GetState (self):
+        pass
+
+    def CardIn (self):
+        pass
+
+    def CardOut (self):
+        pass
+
+        
+class Smart70:
 
     # Openssl cipher spec for smart70
     CIPHER_SPEC = 'ADH-AES128-SHA:@SECLEVEL=0'
+
+    # System wide commands
+    GET_DEVICES = 0x3250
     
     def __init__ (self, remote_ip, remote_port):
 
@@ -169,6 +248,9 @@ class Smart70:
         # Connect to server
         self.client_conn.connect ((self.remote_ip, self.remote_port))            
 
+    def Disconnect (self):
+        self.client_conn.close ()
+        
     # Open Smart70 system
     def Open (self):
 
@@ -178,38 +260,34 @@ class Smart70:
         # Connect to machine
         pkt = Packet ()
         pkt.Reset ()
-        pkt.Encode (0x3e8, 'SMART'.encode ('utf-16'))
-        pkt.Send ()
+        pkt.Encode (Packet.CONNECT, b'S\x00M\x00A\x00R\x00T\x00\x00\x00')
 
-        # Receive response and token
-        pkt.Recv ()
+        # Token stored automatically
+        pkt.SendRecv (self.client_conn)
 
     # Close Smart70 system
     def Close (self):
-        pass
 
+        # Create disconnect packet
+        pkt = Packet ()
+        pkt.Encode (Packet.DISCONNECT, struct.pack ('<I', Packet.token))
+        pkt.SendRecv (self.client_conn)
+
+        # Close socket
+        self.Disconnect ()
+        
     # Get list of modules
-    def GetModules (self):
-        pass
+    def GetDevices (self):
 
-    # Return 64 bit status of module
-    def GetStatus (self, mod):
-        pass
+        # Create a packet
+        pkt = Packet ()
+        pkt.Encode (Packet.GET, struct.pack ('<H', self.GET_DEVICES) + b'\x00')
+        pkt.SendRecv (self.client_conn)
 
-    # Get module state
-    # 0x04 - Module has card
-    # 0x08 - Module is initializing
-    # 0x10 - Running last command
-    # 0x20 - Failed last command
-    def GetState (self, mod):
-        pass
-
-    def CardIn (self, mod):
-        pass
-
-    def CardOut (self, mod):
-        pass
-
+        # Decode response
+        devs = []
+        return devs
+    
     def CardMove (self, mod_from, mod_to):
         pass
     
@@ -240,7 +318,7 @@ class Smart70:
             lock.release ()
 
             # Break if disconnect
-            if pkt.pkt_type == 'DISCONNECT':
+            if pkt.pkt_type == Packet.DISCONNECT:
                 break
 
     def Proxy (self, server_port, mode='PARSED', pkt_handler=None):
@@ -306,7 +384,7 @@ class Smart70:
                         lock.release ()
 
                         # Break if disconnect
-                        if pkt.pkt_type == 'DISCONNECT':
+                        if pkt.pkt_type == Packet.DISCONNECT:
                             break
                         
                     # Wait for thread to join
