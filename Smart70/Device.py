@@ -9,6 +9,8 @@ import sys
 import socket
 import struct
 from Packet import *
+#import Devices
+#
 
 class Device:
 
@@ -139,37 +141,5 @@ class Device:
             if d.Name() == name:
                 return d
 
-
-# Inherit from device
-class Hopper (Device):
-    
-    def __init__ (self, dev_id, conn, int_id):
-        super().__init__ (dev_id, conn, int_id)
-
-    def StatusStr (self, val):
-        return "=> " + hex (val)
-
-class Printer (Device):
-    
-    def __init__ (self, dev_id, conn, int_id):
-        super().__init__ (dev_id, conn, int_id)
-
-    def StatusStr (self, val):
-        return "=> " + hex (val)
-
-class Flipper (Device):
-    
-    def __init__ (self, dev_id, conn, int_id):
-        super().__init__ (dev_id, conn, int_id)
-
-    def StatusStr (self, val):
-        return "=> " + hex (val)
-
-class System (Device):
-    
-    def __init__ (self, dev_id, conn, int_id):
-        super().__init__ (dev_id, conn, int_id)
-
-    def StatusStr (self, val):
-        return "=> " + hex (val)
-
+# Must do this here to avoid circular dependency
+from Devices import *
