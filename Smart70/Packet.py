@@ -21,7 +21,7 @@ class Packet:
     CONNECT    = 0x03e8
     DISCONNECT = 0x03e9
     GET        = 0x0c1c
-    PUT        = 0x0c1d
+    SET        = 0x0c1d
     CMD = {
         CONNECT : { 'STR' : 'CONNECT',
                     'REQ' : { 'TOKEN' : False, 'FIELDS' : [] },
@@ -32,7 +32,7 @@ class Packet:
         GET : { 'STR' : 'GET',
                 'REQ' : { 'TOKEN' : True, 'FIELDS' : [4] },
                 'RSP' : { 'TOKEN' : True, 'FIELDS' : [4] }},
-        PUT : { 'STR' : 'PUT',
+        SET : { 'STR' : 'SET',
                 'REQ' : { 'TOKEN' : True, 'FIELDS' : [4] },
                 'RSP' : { 'TOKEN' : False, 'FIELDS' : [] }},
     }
@@ -173,16 +173,18 @@ class Packet:
             ret += ' [' + str(n) + '] : ' + str(self.field[n]) + '\n'
         ret += "PLEN : " + str(self.payload_len) + '\n'
         ret += "TOKEN: " + str( hex (self.token)) + '\n'
-        ret += "PAYLOAD:\n" + self.byte2hex (self.payload) + '\n\n'
-        ret += self.byte2hex (self.raw) + '\n' + self.byte2hexstr (self.raw) + '\n'
+        ret += "PAYLOAD:\n" + Packet.byte2hex (self.payload) + '\n\n'
+        ret += Packet.byte2hex (self.raw) + '\n' + Packet.byte2hexstr (self.raw) + '\n'
         return ret
-    
-    def byte2hex (self, data):
+
+    @staticmethod
+    def byte2hex (data):
         pdata = ' '.join("{:02x}".format(d) for d in data)
         pdata = '\n'.join(pdata[i:i+48] for i in range(0, len(pdata), 48))
         return pdata
 
-    def byte2hexstr (self, data):
+    @staticmethod
+    def byte2hexstr (data):
         ret = re.sub(f'[^{re.escape(string.printable)}]', '.', data.decode ('ascii', 'replace'))
         return re.sub(r"\s+", '.', ret)
 

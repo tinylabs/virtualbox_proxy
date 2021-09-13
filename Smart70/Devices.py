@@ -4,6 +4,7 @@
 #
 #
 from Device import *
+from Packet import *
 
 class Hopper (Device):
     
@@ -233,6 +234,62 @@ class System (Device):
     def __init__ (self, dev_id, conn, int_id):
         super().__init__ (dev_id, conn, int_id)
 
-    def StatusStr (self, val):
-        return "=> " + hex (val)
+        # GET_DEVICES
+        self.ATTR['DEVICES'] = {
+            
+            # Get devices
+            'ID'   : 0x3250,
+            'TYPE' : Packet.GET,
+            'RSP'  : self.GetDevices,
+            'DEC'  : self.GetDevicesStr
+        }
+        
+        # Get preemption
+        self.ATTR['PREEMPT+'] = {
+            
+            # Get devices
+            'ID'   : 0x0160,
+            'TYPE' : Packet.GET,
+            'RSP'  : lambda x: struct.unpack ('<H', x[0:2])[0],
+            'DEC'  : lambda x: hex (x)
+        }
 
+        # Release preemption
+        self.ATTR['PREEMPT-'] = {
+            
+            # Get devices
+            'ID'   : 0x0260,
+            'TYPE' : Packet.SET,
+            'RSP'  : lambda x: struct.unpack ('<I', x[0:4])[0],
+            'DEC'  : lambda x: 'OK' if x==0 else 'FAIL'
+        }
+
+        # Clear preempt val
+        self.preempt_val = 0xffff
+        
+    def StatusStr (self, val):
+        return ''
+
+    def GetDevices (self, payload):
+        Packet.byte2hex (payload)
+        cnt = payload[0]
+        dp = payload[1:]
+        devs = []
+        for n in range (0, cnt):
+            dev = Device.Create (dp[n*2], self.conn, dp[n*2+1])
+            devs.append (dev)
+        return devs
+
+    def GetDevicesStr (self, devs):
+        ret = ''
+        for d in devs:
+            ret += d.Name () + ' '
+        return ret
+
+    def ReqPreempt (self):
+        self.preempt_val = self.Get ('PREEMPT+')
+
+    def ReleasePreempt (self):
+        if self.preempt_val != 0xffff:
+            self.Set ('PREEMPT-', struct.pack ('<H', self.preempt_val))
+            self.preempt_val = 0xffff

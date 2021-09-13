@@ -27,10 +27,10 @@ class Smart70:
         self.remote_ip = remote_ip
         self.remote_port = remote_port
         self.verbose = verbose
-        self.device = {}
         self.get_devices = False
         self.pdev = None
-        
+        self.device = {}
+
     def Connect (self):
 
         # Create client sock
@@ -42,8 +42,14 @@ class Smart70:
         # Connect to server
         self.client_conn.connect ((self.remote_ip, self.remote_port))            
 
+        # Start with system device
+        self.device[0] = System (0, self.client_conn, 0)
+
     def Disconnect (self):
         self.client_conn.close ()
+
+        # Delete system device
+        self.device[0] = None
         
     # Open Smart70 system
     def Open (self):
@@ -90,9 +96,6 @@ class Smart70:
         pkt.SendRecv (self.client_conn)
         return self.GetDevicesDecode (pkt)
     
-    def CardMove (self, mod_from, mod_to):
-        pass
-    
     # Handle server to client responses
     def server2client (self, lock):
 
@@ -113,15 +116,20 @@ class Smart70:
             lock.acquire ()
 
             # print response
-            if self.verbose == 1:
+            if self.verbose >= 1:
                 print (pkt, end='')
-                if pkt.payload[-1] in self.device.keys ():
-                    self.pdev = self.device[pkt.payload[-1]]
+                dev_id = pkt.payload[2]
+                if dev_id in self.device.keys ():
+                    if (('DEVICES' in self.device[dev_id].ATTR.keys()) and
+                        (pkt.pkt_type == Packet.GET) and
+                        (struct.unpack ('<H', pkt.payload[0:2])[0] == self.device[dev_id].ATTR['DEVICES']['ID'])):
+                        self.get_devices = True
+                    self.pdev = self.device[dev_id]
                     print (self.pdev.DecodeStr (pkt))
                 else:
                     self.pdev = None
                     print (pkt.byte2hex (pkt.payload))
-            elif self.verbose == 2:
+            if self.verbose == 2:
                 print (pkt.Verbose())
         
             # Release lock
@@ -130,13 +138,11 @@ class Smart70:
             # Break if disconnect
             if pkt.pkt_type == Packet.DISCONNECT:
                 break
-            elif (pkt.direction == 'REQ') and (pkt.payload == b'\x50\x32\x00'):
-                self.get_devices = True
 
-    def Proxy (self, server_port, mode='PARSED', pkt_handler=None):
+    def Proxy (self, server_port, pkt_handler=None):
 
-        # Save mode
-        self.mode = mode
+        # Start with system device
+        self.device[0] = System (0, None, 0)
         
         # Create server
         context = ssl.SSLContext (ssl.PROTOCOL_TLSv1)
@@ -171,7 +177,7 @@ class Smart70:
                     sthread = threading.Thread (target=self.server2client, args=(lock,))
                     sthread.start ()
                     
-                    # Shuttle packets from client to server
+                    # Shuttle packets from server to client
                     while True:
                         
                         # Wait for packet from server
@@ -189,14 +195,14 @@ class Smart70:
                         lock.acquire ()
 
                         # print response
-                        if self.verbose == 1:
+                        if self.verbose >= 1:
                             print (pkt, end='')
                             if self.pdev:
                                 print (self.pdev.DecodeStr (pkt))
                             else:
                                 print (pkt.byte2hex (pkt.payload))
 
-                        elif self.verbose == 2:
+                        if self.verbose == 2:
                             print (pkt.Verbose())
             
                         # Release lock
@@ -204,8 +210,10 @@ class Smart70:
 
                         # Decode device list if GET_DEVICES response
                         if self.get_devices:
+                            devs = self.device[0].GetDevices (pkt.payload)
+                            for d in devs:
+                                self.device[d.dev_id] = d
                             self.get_devices = False
-                            self.GetDevicesDecode (pkt)
 
                         # Break if disconnect
                         if pkt.pkt_type == Packet.DISCONNECT:
