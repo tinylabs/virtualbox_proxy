@@ -87,15 +87,9 @@ class Smart70:
             self.device[dp[n*2]] = dev
         return devices
         
-    # Get list of modules
-    def GetDevices (self):
-
-        # Create a packet
-        pkt = Packet ()
-        pkt.Encode (Packet.GET, struct.pack ('<H', self.GET_DEVICES) + b'\x00')
-        pkt.SendRecv (self.client_conn)
-        return self.GetDevicesDecode (pkt)
-    
+    def GetSystem (self):
+        return self.device[0]
+        
     # Handle server to client responses
     def server2client (self, lock):
 
@@ -210,7 +204,7 @@ class Smart70:
 
                         # Decode device list if GET_DEVICES response
                         if self.get_devices:
-                            devs = self.device[0].GetDevices (pkt.payload)
+                            devs = self.device[0].GetDevicesDecode (pkt.payload)
                             for d in devs:
                                 self.device[d.dev_id] = d
                             self.get_devices = False

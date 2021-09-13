@@ -83,12 +83,12 @@ class Packet:
     def SendRecv (self, conn):
         conn.send (self.raw)
         if Packet.verbose == 1:
-            print (self)
+            print (str(self) + ' ' + Packet.byte2hex (self.payload))
         elif Packet.verbose == 2:
             print (self.Verbose ())
         self.Recv (conn)
         if Packet.verbose == 1:
-            print (self)
+            print (str(self) + ' ' + Packet.byte2hex (self.payload))
         elif Packet.verbose == 2:
             print (self.Verbose ())
         Packet.idx += 1

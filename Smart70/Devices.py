@@ -240,7 +240,7 @@ class System (Device):
             # Get devices
             'ID'   : 0x3250,
             'TYPE' : Packet.GET,
-            'RSP'  : self.GetDevices,
+            'RSP'  : self.GetDevicesDecode,
             'DEC'  : self.GetDevicesStr
         }
         
@@ -270,7 +270,7 @@ class System (Device):
     def StatusStr (self, val):
         return ''
 
-    def GetDevices (self, payload):
+    def GetDevicesDecode (self, payload):
         Packet.byte2hex (payload)
         cnt = payload[0]
         dp = payload[1:]
@@ -280,6 +280,9 @@ class System (Device):
             devs.append (dev)
         return devs
 
+    def GetDevices (self):
+        return self.Get ('DEVICES')
+    
     def GetDevicesStr (self, devs):
         ret = ''
         for d in devs:

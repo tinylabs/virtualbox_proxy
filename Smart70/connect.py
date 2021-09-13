@@ -13,8 +13,11 @@ if __name__ == '__main__':
     # Open connection
     sm70.Open ()
 
+    # Get system device
+    sys = sm70.GetSystem ()
+    
     # Get devices
-    devs = sm70.GetDevices ()
+    devs = sys.GetDevices ()
     for d in devs:
         print ('Found: ' + d.Name ())
     
