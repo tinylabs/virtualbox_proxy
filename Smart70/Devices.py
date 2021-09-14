@@ -174,6 +174,18 @@ class Flipper (Device):
     def __init__ (self, dev_id, conn, int_id):
         super().__init__ (dev_id, conn, int_id)
 
+        self.ATTR['ERROR_BIN'] = {
+            
+            # Get devices
+            'ID'   : 0x1460,
+            'TYPE' : Packet.SET,
+            'RSP'  : lambda x: struct.unpack ('<I', x[0:4])[0],
+            'DEC'  : lambda x: 'OK' if x==0 else 'FAIL'
+        }
+
+    def MoveErrorBin (self):
+        self.Set ('ERROR_BIN', struct.pack ('<HB', Device.preempt_val, 0xA))
+        
     def StatusStr (self, val):
         ret = '\n'
         if val & 0x0000000000000001:

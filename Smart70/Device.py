@@ -1,8 +1,5 @@
 #
-# Smart70 connection manager
-#
-# Manages connection to device
-# Also can proxy traffic to decode in transit
+# Smart70 core Device
 #
 #
 import sys
@@ -212,7 +209,7 @@ class Device:
                 if 'REQ' in self.ATTR[name]:
                     ret += ' ' + self.ATTR[name]['REQ'] (pkt.payload[3:])
             else:
-                ret = 'ID[' + hex (attr) + '] ' + Packet.byte2hex (pkt.payload[3:])
+                ret = self.Name() + ' ID[' + hex (attr) + '] ' + Packet.byte2hex (pkt.payload[3:])
 
             # Save attribute
             self.pattr = name
