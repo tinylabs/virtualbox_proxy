@@ -11,6 +11,7 @@ import struct
 from Packet import *
 import string
 import re
+import time
 
 class Device:
 
@@ -20,7 +21,26 @@ class Device:
         0x40 : 'Printer',
         0x60 : 'Flipper'
     }
-        
+
+    # Card movement directions
+    DIR_LEFT  = 0
+    DIR_RIGHT = 1
+
+    # States
+    STATE_CARD    = 0x4
+    STATE_INITING = 0x8
+    STATE_RUNNING = 0x10
+    STATE_FAILED  = 0x20
+
+    # Global preempt value
+    preempt_val = 0xffff
+
+    # System instance singleton
+    sysdev = None
+
+    # Set verbosity
+    verbose = 0
+    
     def __init__ (self, dev_id, conn, int_id):
         self.dev_id = dev_id
         self.int_id = int_id
@@ -65,19 +85,26 @@ class Device:
         
     @staticmethod
     def Create (dev_id, conn, int_id):
+        
         if dev_id in Device.NAME.keys():
             cls =  getattr (sys.modules[__name__], Device.NAME[dev_id])
-            return cls (dev_id, conn, int_id)
+            obj = cls (dev_id, conn, int_id)
+            if Device.NAME[dev_id] == 'System':
+                Device.sysdev = obj
+            return obj
         else:
             return None
 
+    # Get system singleton
+    @staticmethod
+    def GetSystem ():
+        return Device.sysdev
+    
     def CardMoveStr (self, arr):
-        ret = 'DIR:'
-        if arr[2]:
-            ret += 'RIGHT '
-        else:
-            ret += 'LEFT '
-        ret += 'BLOCK:' + str (arr[1])
+        if arr[2] == Device.DIR_RIGHT:
+            ret = 'RIGHT'
+        elif arr[2] == Device.DIR_LEFT:
+            ret = 'LEFT'
         return ret
     
     def FirmwareStr (self, arr):
@@ -89,20 +116,32 @@ class Device:
     def __str__ (self):
         return self.Name () + '[' + hex (self.int_id) + ']'
 
-    def Encode (self, ptype, attr, payload=None):
+    def Encode (self, ptype, attr, payload=b''):
         pkt = Packet()
-        pkt.Encode (ptype, struct.pack ('<H', attr) + struct.pack ('B', self.dev_id))
-        if payload:
-            pkt.payload += payload
+        pkt.Encode (ptype, struct.pack ('<H', attr) + struct.pack ('B', self.dev_id) + payload)
         return pkt
 
     def Get (self, attr):
         # Create packet
         pkt = self.Encode (self.ATTR[attr]['TYPE'], self.ATTR[attr]['ID'])
 
+        # Print trace
+        if Device.verbose >= 1:
+            print (pkt, end='')
+            print (self.DecodeStr (pkt))
+        if Device.verbose == 2:
+            print (pkt.Debug ())
+            
         # Send and receive response
         pkt.SendRecv (self.conn)
 
+        # Print trace
+        if Device.verbose >= 1:
+            print (pkt, end='')
+            print (self.DecodeStr (pkt))
+        if Device.verbose == 2:
+            print (pkt.Debug ())
+        
         # Parse payload
         return self.ATTR[attr]['RSP'] (pkt.payload)
 
@@ -111,8 +150,22 @@ class Device:
         # Create packet
         pkt = self.Encode (self.ATTR[attr]['TYPE'], self.ATTR[attr]['ID'], payload)
 
+        # Print trace
+        if Device.verbose >= 1:
+            print (pkt, end='')
+            print (self.DecodeStr (pkt))
+        if Device.verbose == 2:
+            print (pkt.Debug ())
+
         # Send and receive response
         pkt.SendRecv (self.conn)
+
+        # Print trace
+        if Device.verbose >= 1:
+            print (pkt, end='')
+            print (self.DecodeStr (pkt))
+        if Device.verbose == 2:
+            print (pkt.Debug ())
 
         # Parse payload
         return self.ATTR[attr]['RSP'] (pkt.payload)
@@ -122,19 +175,15 @@ class Device:
         return self.ATTR[attr]['DEC'] (val)
                            
     # Get module state
-    # 0x04 - Module has card
-    # 0x08 - Module is initializing
-    # 0x10 - Running last command
-    # 0x20 - Failed last command
     def StateStr (self, val):
         ret = ''
-        if val & 0x04:
+        if val & Device.STATE_CARD:
             ret += 'CARD|'
-        elif val & 0x08:
+        elif val & Device.STATE_INITING:
             ret += 'INIT|'
-        elif val & 0x10:
+        elif val & Device.STATE_RUNNING:
             ret += 'RUNNING|'
-        elif val & 0x20:
+        elif val & Device.STATE_FAILED:
             ret += 'FAILED|'
         return '[' + ret[:-1] + ']'
 
@@ -178,13 +227,34 @@ class Device:
         # Return string
         return ret
             
+    def CardIn (self, direction):
+        self.Set ('CARDIN', struct.pack ('<HB',
+                                         Device.preempt_val,
+                                         direction))
 
-    def CardIn (self):
-        pass
+    def CardOut (self, direction):
+        self.Set ('CARDOUT', struct.pack ('<HB',
+                                         Device.preempt_val,
+                                         direction))
 
-    def CardOut (self):
-        pass
+    def CardMove (self, dest):
 
+        # Card already at destination
+        if dest.Get ('STATE') & Device.STATE_CARD:
+            return
+        
+        # Set destination to accept card
+        dest.CardIn (self.Dir (dest))
+
+        # Move card from source
+        self.CardOut (dest.Dir (self))
+
+        # Wait for destination to receive card
+        while (dest.Get ('STATE') & Device.STATE_CARD) == 0:
+
+            # Just wait
+            time.sleep (0.5)
+            
     # Select device from array by name
     @staticmethod
     def Select (dlist, name):

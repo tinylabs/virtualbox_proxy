@@ -39,6 +39,10 @@ class Hopper (Device):
             ret += '\tINIT\n'
         return ret[:-1]
 
+    # Return direction in relation to passed device
+    def Dir (self, dev):
+        return Device.DIR_LEFT
+    
 class Printer (Device):
     
     def __init__ (self, dev_id, conn, int_id):
@@ -158,6 +162,13 @@ class Printer (Device):
             ret += '\tCONFIG\n'
         return ret[:-1]
 
+    # Return direction in relation to passed device
+    def Dir (self, dev):
+        if isinstance (dev, Hopper):
+            return Device.DIR_RIGHT
+        else:
+            return Device.DIR_LEFT        
+
 class Flipper (Device):
     
     def __init__ (self, dev_id, conn, int_id):
@@ -228,7 +239,11 @@ class Flipper (Device):
         if val & 0x0001000000000000:
             ret += '\tINIT\n'
         return ret[:-1]
-    
+
+    # Return direction in relation to passed device
+    def Dir (self, dev):
+        return Device.DIR_RIGHT
+
 class System (Device):
     
     def __init__ (self, dev_id, conn, int_id):
@@ -264,9 +279,6 @@ class System (Device):
             'DEC'  : lambda x: 'OK' if x==0 else 'FAIL'
         }
 
-        # Clear preempt val
-        self.preempt_val = 0xffff
-        
     def StatusStr (self, val):
         return ''
 
@@ -290,9 +302,9 @@ class System (Device):
         return ret
 
     def ReqPreempt (self):
-        self.preempt_val = self.Get ('PREEMPT+')
-
-    def ReleasePreempt (self):
-        if self.preempt_val != 0xffff:
-            self.Set ('PREEMPT-', struct.pack ('<H', self.preempt_val))
-            self.preempt_val = 0xffff
+        Device.preempt_val = self.Get ('PREEMPT+')
+        return Device.preempt_val
+    
+    def RelPreempt (self):
+        self.Set ('PREEMPT-', struct.pack ('<H', Device.preempt_val))
+        Device.preempt_val = 0xffff

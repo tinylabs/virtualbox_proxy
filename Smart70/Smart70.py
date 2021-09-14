@@ -18,15 +18,16 @@ class Smart70:
     # Openssl cipher spec for smart70
     CIPHER_SPEC = 'ADH-AES128-SHA:@SECLEVEL=0'
 
-    # System wide commands
-    GET_DEVICES = 0x3250
+    # Default debug value
+    # 1 = decode packets
+    # 2 = packet dump
+    verbose = 0
     
-    def __init__ (self, remote_ip, remote_port, verbose=0):
+    def __init__ (self, remote_ip, remote_port):
 
         # Save params
         self.remote_ip = remote_ip
         self.remote_port = remote_port
-        self.verbose = verbose
         self.get_devices = False
         self.pdev = None
         self.device = {}
@@ -43,9 +44,11 @@ class Smart70:
         self.client_conn.connect ((self.remote_ip, self.remote_port))            
 
         # Start with system device
-        self.device[0] = System (0, self.client_conn, 0)
+        self.device[0] = Device.Create (0, self.client_conn, 0)
 
     def Disconnect (self):
+
+        # Close connection
         self.client_conn.close ()
 
         # Delete system device
@@ -59,7 +62,7 @@ class Smart70:
         
         # Connect to machine
         pkt = Packet ()
-        pkt.Reset (self.verbose)
+        pkt.Reset ()
         pkt.Encode (Packet.CONNECT, b'S\x00M\x00A\x00R\x00T\x00\x00\x00')
 
         # Token stored automatically
@@ -75,17 +78,6 @@ class Smart70:
 
         # Close socket
         self.Disconnect ()
-
-    def GetDevicesDecode (self, pkt):
-        # Decode response
-        devices = []
-        cnt = pkt.payload[0]
-        dp = pkt.payload[1:]
-        for n in range (0, cnt):
-            dev = Device.Create (dp[n*2], self.client_conn, dp[n*2+1])
-            devices.append (dev)
-            self.device[dp[n*2]] = dev
-        return devices
         
     def GetSystem (self):
         return self.device[0]
@@ -110,7 +102,7 @@ class Smart70:
             lock.acquire ()
 
             # print response
-            if self.verbose >= 1:
+            if Smart70.verbose >= 1:
                 print (pkt, end='')
                 dev_id = pkt.payload[2]
                 if dev_id in self.device.keys ():
@@ -123,8 +115,8 @@ class Smart70:
                 else:
                     self.pdev = None
                     print (pkt.byte2hex (pkt.payload))
-            if self.verbose == 2:
-                print (pkt.Verbose())
+            if Smart70.verbose == 2:
+                print (pkt.Debug())
         
             # Release lock
             lock.release ()
@@ -135,9 +127,6 @@ class Smart70:
 
     def Proxy (self, server_port, pkt_handler=None):
 
-        # Start with system device
-        self.device[0] = System (0, None, 0)
-        
         # Create server
         context = ssl.SSLContext (ssl.PROTOCOL_TLSv1)
         context.set_ciphers (self.CIPHER_SPEC)
@@ -189,15 +178,15 @@ class Smart70:
                         lock.acquire ()
 
                         # print response
-                        if self.verbose >= 1:
+                        if Smart70.verbose >= 1:
                             print (pkt, end='')
                             if self.pdev:
                                 print (self.pdev.DecodeStr (pkt))
                             else:
-                                print (pkt.byte2hex (pkt.payload))
+                                print (Packet.byte2hex (pkt.payload))
 
-                        if self.verbose == 2:
-                            print (pkt.Verbose())
+                        if Smart70.verbose == 2:
+                            print (pkt.Debug())
             
                         # Release lock
                         lock.release ()

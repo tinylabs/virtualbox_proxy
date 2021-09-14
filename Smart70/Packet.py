@@ -15,7 +15,6 @@ class Packet:
     # Save these global variables to ease connections
     idx = 0
     token = 0
-    verbose = 0
     
     MAGIC      = b'ISNP'
     CONNECT    = 0x03e8
@@ -37,13 +36,11 @@ class Packet:
                 'RSP' : { 'TOKEN' : False, 'FIELDS' : [] }},
     }
 
-
     def __init__ (self):
         self.raw = b''
 
-    def Reset (self, verbose=0):
+    def Reset (self):
         Packet.idx = 0
-        Packet.verbose = verbose
         
     def Encode (self, ptype, payload):
 
@@ -82,15 +79,7 @@ class Packet:
         
     def SendRecv (self, conn):
         conn.send (self.raw)
-        if Packet.verbose == 1:
-            print (str(self) + ' ' + Packet.byte2hex (self.payload))
-        elif Packet.verbose == 2:
-            print (self.Verbose ())
         self.Recv (conn)
-        if Packet.verbose == 1:
-            print (str(self) + ' ' + Packet.byte2hex (self.payload))
-        elif Packet.verbose == 2:
-            print (self.Verbose ())
         Packet.idx += 1
         # Save token if connect
         if self.pkt_type == Packet.CONNECT:
@@ -158,7 +147,7 @@ class Packet:
         return ret
 
     # Dump out packet
-    def Verbose (self):
+    def Debug (self):
         ret = ""
         if self.Validate ():
             ret += "VALIDATE: OK\n"
