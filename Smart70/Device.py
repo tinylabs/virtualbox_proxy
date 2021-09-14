@@ -118,31 +118,7 @@ class Device:
         pkt.Encode (ptype, struct.pack ('<H', attr) + struct.pack ('B', self.dev_id) + payload)
         return pkt
 
-    def Get (self, attr):
-        # Create packet
-        pkt = self.Encode (self.ATTR[attr]['TYPE'], self.ATTR[attr]['ID'])
-
-        # Print trace
-        if Device.verbose >= 1:
-            print (pkt, end='')
-            print (self.DecodeStr (pkt))
-        if Device.verbose == 2:
-            print (pkt.Debug ())
-            
-        # Send and receive response
-        pkt.SendRecv (self.conn)
-
-        # Print trace
-        if Device.verbose >= 1:
-            print (pkt, end='')
-            print (self.DecodeStr (pkt))
-        if Device.verbose == 2:
-            print (pkt.Debug ())
-        
-        # Parse payload
-        return self.ATTR[attr]['RSP'] (pkt.payload)
-
-    def Set (self, attr, payload):
+    def SendRecv (self, attr, payload=b''):
 
         # Create packet
         pkt = self.Encode (self.ATTR[attr]['TYPE'], self.ATTR[attr]['ID'], payload)
@@ -168,7 +144,7 @@ class Device:
         return self.ATTR[attr]['RSP'] (pkt.payload)
         
     def GetStr (self, attr):
-        val = self.Get (attr)
+        val = self.SendRecv (attr)
         return self.ATTR[attr]['DEC'] (val)
                            
     # Get module state
@@ -176,17 +152,23 @@ class Device:
         ret = ''
         if val & Device.STATE_CARD:
             ret += 'CARD|'
-        elif val & Device.STATE_INITING:
+        if val & Device.STATE_INITING:
             ret += 'INIT|'
-        elif val & Device.STATE_RUNNING:
+        if val & Device.STATE_RUNNING:
             ret += 'RUNNING|'
-        elif val & Device.STATE_FAILED:
+        if val & Device.STATE_FAILED:
             ret += 'FAILED|'
-        return '[' + ret[:-1] + ']'
+        return hex(val) + '[' + ret[:-1] + ']'
 
     # Shall be overridden by derived class
     def StatusStr (self, val):
         return hex (val)
+
+    def State (self):
+        return self.SendRecv ('STATE')
+    
+    def Status (self):
+        return self.SendRecv ('STATUS')
     
     # Decode Packet for proxy
     def DecodeStr (self, pkt):
@@ -225,19 +207,19 @@ class Device:
         return ret
             
     def CardIn (self, direction):
-        self.Set ('CARDIN', struct.pack ('<HB',
-                                         Device.preempt_val,
-                                         direction))
+        self.SendRecv ('CARDIN', struct.pack ('<HB',
+                                              Device.preempt_val,
+                                              direction))
 
     def CardOut (self, direction):
-        self.Set ('CARDOUT', struct.pack ('<HB',
-                                         Device.preempt_val,
-                                         direction))
+        self.SendRecv ('CARDOUT', struct.pack ('<HB',
+                                               Device.preempt_val,
+                                               direction))
 
     def CardMove (self, dest):
 
         # Card already at destination
-        if dest.Get ('STATE') & Device.STATE_CARD:
+        if dest.State() & Device.STATE_CARD:
             return
         
         # Set destination to accept card
@@ -247,7 +229,7 @@ class Device:
         self.CardOut (dest.Dir (self))
 
         # Wait for destination to receive card
-        while (dest.Get ('STATE') & Device.STATE_CARD) == 0:
+        while (dest.State() & Device.STATE_CARD) == 0:
 
             # Just wait
             time.sleep (0.5)
