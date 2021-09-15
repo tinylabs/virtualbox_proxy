@@ -21,6 +21,13 @@ class Packet:
     DISCONNECT = 0x03e9
     GET        = 0x0c1c
     SET        = 0x0c1d
+    DIAG       = 0x0bca
+    AAAA       = 0x0bb8
+    BBBB       = 0x0bbc
+    CCCC       = 0x0bbe
+    DDDD       = 0x0bc2
+    EEEE       = 0x0bc4
+    FFFF       = 0x006f
     CMD = {
         CONNECT : { 'STR' : 'CONNECT',
                     'REQ' : { 'TOKEN' : False, 'FIELDS' : [] },
@@ -34,6 +41,27 @@ class Packet:
         SET : { 'STR' : 'SET',
                 'REQ' : { 'TOKEN' : True, 'FIELDS' : [4] },
                 'RSP' : { 'TOKEN' : False, 'FIELDS' : [] }},
+        DIAG : { 'STR' : 'DIAG',
+                 'REQ' : { 'TOKEN' : False, 'FIELDS' : [] },
+                 'RSP' : { 'TOKEN' : True, 'FIELDS' : [4] }},
+        AAAA : { 'STR' : 'AAAA',
+                 'REQ' : { 'TOKEN' : True, 'FIELDS' : [4] },
+                 'RSP' : { 'TOKEN' : False, 'FIELDS' : [] }},
+        BBBB : { 'STR' : 'BBBB',
+                 'REQ' : { 'TOKEN' : False, 'FIELDS' : [] },
+                 'RSP' : { 'TOKEN' : True, 'FIELDS' : [4] }},
+        CCCC : { 'STR' : 'CCCC',
+                 'REQ' : { 'TOKEN' : False, 'FIELDS' : [] },
+                 'RSP' : { 'TOKEN' : True, 'FIELDS' : [4] }},
+        DDDD : { 'STR' : 'DDDD',
+                 'REQ' : { 'TOKEN' : False, 'FIELDS' : [] },
+                 'RSP' : { 'TOKEN' : True, 'FIELDS' : [4] }},
+        EEEE : { 'STR' : 'EEEE',
+                 'REQ' : { 'TOKEN' : False, 'FIELDS' : [] },
+                 'RSP' : { 'TOKEN' : True, 'FIELDS' : [4] }},
+        FFFF : { 'STR' : 'FFFF',
+                 'REQ' : { 'TOKEN' : False, 'FIELDS' : [] },
+                 'RSP' : { 'TOKEN' : True, 'FIELDS' : [4] }},
     }
 
     def __init__ (self):
@@ -41,6 +69,13 @@ class Packet:
 
     def Reset (self):
         Packet.idx = 0
+
+    def DeviceID (self):
+        if ((self.pkt_type == Packet.GET) or
+            (self.pkt_type == Packet.SET)):
+            return self.payload[2]
+        else:
+            return None
         
     def Encode (self, ptype, payload):
 
@@ -115,7 +150,8 @@ class Packet:
         self.payload_len = self.field[self.field_cnt-1]
 
         # If expecting token then parse
-        if self.CMD[self.pkt_type][self.direction]['TOKEN']:
+        if ((self.pkt_type in self.CMD.keys()) and
+            (self.CMD[self.pkt_type][self.direction]['TOKEN'])):
             self.raw += conn.recv (4)
             self.token = struct.unpack ("<I", self.raw[idx:idx+4])[0]
             idx += 4
@@ -123,27 +159,32 @@ class Packet:
             self.token = 0xFFFFFFFF
 
         # Read and store payload
-        self.raw += conn.recv (1024)
+        self.raw += conn.recv (self.payload_len)
         self.payload = self.raw[idx:]
 
     def Validate (self):
+        if self.pkt_type not in self.CMD.keys():
+            return False
         # Check magic
         if self.magic != self.MAGIC:
-            return 0
+            return False
         # Check dir
         if self.direction != 'REQ' and self.direction != 'RSP':
-            return 0
+            return False
         # Check length
         if self.payload_len != len(self.payload):
-            return 0
+            return False
         # Passed validation
-        return 1
+        return True
 
     def __str__ (self):
-        ret = str (self.idx) + ':'
-        ret += self.direction + ' '
-        if self.direction == 'REQ':
-            ret += self.CMD[self.pkt_type]['STR'] + ' '
+        if self.pkt_type not in self.CMD.keys ():
+            ret = self.Debug ()
+        else:
+            ret = str (self.idx) + ':'
+            ret += self.direction + ' '
+            if self.direction == 'REQ':
+                ret += self.CMD[self.pkt_type]['STR'] + ' '
         return ret
 
     # Dump out packet
@@ -156,7 +197,10 @@ class Packet:
         ret += "DIR  : " + self.direction + '\n'
         ret += "MAGIC: " + str(self.magic) + '\n'
         ret += "INDEX: " + str(self.idx) + '\n'
-        ret += "TYPE : " + self.CMD[self.pkt_type]['STR'] + '\n'
+        if self.pkt_type in self.CMD.keys():            
+            ret += "TYPE : " + self.CMD[self.pkt_type]['STR'] + '\n'
+        else:
+            ret += "TYPE : UNKNOWN:" + hex (self.pkt_type) + '\n'
         ret += "FCNT : " + str(self.field_cnt) + '\n'
         for n in range (0, self.field_cnt):
             ret += ' [' + str(n) + '] : ' + str(self.field[n]) + '\n'

@@ -103,18 +103,18 @@ class Smart70:
 
             # print response
             if Smart70.verbose >= 1:
-                print (pkt, end='')
-                dev_id = pkt.payload[2]
+                dev_id = pkt.DeviceID ()
                 if dev_id in self.device.keys ():
                     if (('DEVICES' in self.device[dev_id].ATTR.keys()) and
                         (pkt.pkt_type == Packet.GET) and
                         (struct.unpack ('<H', pkt.payload[0:2])[0] == self.device[dev_id].ATTR['DEVICES']['ID'])):
                         self.get_devices = True
                     self.pdev = self.device[dev_id]
+                    print (pkt, end='')
                     print (self.pdev.DecodeStr (pkt))
                 else:
                     self.pdev = None
-                    print (pkt.byte2hex (pkt.payload))
+                    print (pkt.Debug())
             if Smart70.verbose == 2:
                 print (pkt.Debug())
         
@@ -183,7 +183,7 @@ class Smart70:
                             if self.pdev:
                                 print (self.pdev.DecodeStr (pkt))
                             else:
-                                print (Packet.byte2hex (pkt.payload))
+                                print (pkt.Debug())
 
                         if Smart70.verbose == 2:
                             print (pkt.Debug())
